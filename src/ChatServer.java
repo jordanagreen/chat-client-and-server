@@ -90,9 +90,11 @@ public class ChatServer {
                     } else if (isLookupQuery(input)){
                         String queriedName = input.substring(input.indexOf(" "));
                         if (ipAddressMap.containsKey(queriedName)){
-                            out.write(IP_STRING + ipAddressMap.get(queriedName).toString());
+                            out.println(IP_STRING + ipAddressMap.get(queriedName).toString());
+                            out.flush();
                         } else {
-                            out.write("User " + queriedName + " is not registered.");
+                            out.println("User " + queriedName + " is not registered.");
+                            out.flush();
                         }
                     }
                 }

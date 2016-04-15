@@ -22,11 +22,32 @@ public class ChatClient {
     private void runClient(){
         try(BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in))){
             System.out.println("client started");
-            String input;
-            while ((input = stdIn.readLine()) != null){
-                if (!isRegistered && isRegistration(input)){
-                    String name = input.substring(input.lastIndexOf(" "));
-                    isRegistered = register(name);
+
+//          connect to server
+            try(Socket socket = new Socket(hostName, portNumber);
+                PrintWriter out = new PrintWriter(socket.getOutputStream());
+                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+                String input;
+                while ((input = stdIn.readLine()) != null){
+                    if (isRegistration(input)){
+                        if (!isRegistered){
+                            String name = input.substring(input.lastIndexOf(" "));
+                            String response = register(name, out, in);
+                            isRegistered = response.trim().equals(ChatServer.REGISTER_CONFIRM);
+                            System.out.println(response);
+                        } else {
+                            System.out.println("You are already registered.");
+                        }
+                    } else if (isLookup(input)){
+                        String name = input.substring(input.lastIndexOf(" "));
+                        String response = lookupIP(name, out, in);
+                        if (response.startsWith(ChatServer.IP_STRING)){
+                            System.out.println(name + " " + response);
+//                          connectToIP(response);
+                        } else {
+                            System.out.println(response);
+                        }
+                    }
                 }
             }
         } catch (IOException e){
@@ -34,21 +55,20 @@ public class ChatClient {
         }
     }
 
-    private boolean register(String name){
-        try(Socket socket = new Socket(hostName, portNumber);
-            PrintWriter out = new PrintWriter(socket.getOutputStream());
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
-            System.out.println(REGISTER_QUERY + name);
+    private String register(String name, PrintWriter out, BufferedReader in) throws IOException{
             out.println(REGISTER_QUERY + name);
             out.flush();
             String response = in.readLine();
             System.out.println("response: " + response);
-            return response.trim().equals(ChatServer.REGISTER_CONFIRM);
-        } catch (IOException e){
-            System.err.println("Couldn't connect to " + hostName + ":" + portNumber);
-            e.printStackTrace();
-            return false;
-        }
+            return response;
+    }
+
+    private String lookupIP(String name, PrintWriter out, BufferedReader in) throws IOException{
+            out.println(LOOKUP_QUERY + name);
+            out.flush();
+            String response = in.readLine();
+            System.out.println("response: " + response);
+            return response;
     }
 
 
@@ -76,4 +96,5 @@ public class ChatClient {
         ChatClient client = new ChatClient(hostName, portNumber);
         client.runClient();
     }
+
 }
