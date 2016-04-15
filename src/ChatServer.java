@@ -13,9 +13,9 @@ public class ChatServer {
     private Map<String, InetAddress> ipAddressMap;
     private int portNumber;
 
-    public static final String REGISTRATION_STRING = "register me as";
-    public static final String QUERY_STRING = "i want to talk to";
+
     public static final String IP_STRING = "IP: ";
+    public static final String REGISTER_CONFIRM = "You are now registered.";
 
     ChatServer(int portNumber){
         this.portNumber = portNumber;
@@ -30,19 +30,25 @@ public class ChatServer {
                 BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()))
                 )
         {
+            System.out.println("Connection made");
             String input;
             while ((input = in.readLine()) != null){
-                if (isRegistration(input)) {
-                    String userName = input.substring(input.lastIndexOf(" "));
+                System.out.println("input " + input);
+                if (isRegistrationQuery(input)) {
+                    System.out.println("register");
+                    String userName = input.substring(input.indexOf(" "));
                     if (ipAddressMap.containsKey(userName)){
                         out.println(userName + " is already registered.");
+                        out.flush();
                     } else {
                         InetAddress ip = clientSocket.getInetAddress();
                         ipAddressMap.put(userName, ip);
-                        out.println("You have been registered.");
+                        System.out.println("added " + userName + " " + ip);
+                        out.println(REGISTER_CONFIRM);
+                        out.flush();
                     }
-                } else if (isQuery(input)){
-                    String queriedName = input.substring(input.lastIndexOf(" "));
+                } else if (isLookupQuery(input)){
+                    String queriedName = input.substring(input.indexOf(" "));
                     if (ipAddressMap.containsKey(queriedName)){
                         out.write(IP_STRING + ipAddressMap.get(queriedName).toString());
                     } else {
@@ -52,27 +58,29 @@ public class ChatServer {
             }
         }
         catch (IOException e){
-            System.err.println("Couldn't start the server at port " + portNumber);
             e.printStackTrace();
             System.exit(1);
         }
     }
 
-    private boolean isRegistration(String s){
-        return s.trim().toLowerCase().startsWith(REGISTRATION_STRING);
+    private boolean isRegistrationQuery(String s){
+        return s.trim().startsWith(ChatClient.REGISTER_QUERY);
     }
 
-    private boolean isQuery(String s){
-        return s.trim().toLowerCase().startsWith(QUERY_STRING);
+    private boolean isLookupQuery(String s){
+        return s.trim().startsWith(ChatClient.LOOKUP_QUERY);
     }
+
 
 
     public static void main(String[] args) {
         if (args.length != 1){
             System.out.println("Usage: java ChatServer <port>");
+            System.exit(1);
         }
         int portNumber = Integer.parseInt(args[0]);
         ChatServer server = new ChatServer(portNumber);
+        System.out.println("Starting server");
         server.startServer();
     }
 }
