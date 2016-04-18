@@ -18,6 +18,7 @@ public class ChatClient {
     public static final String LOOKUP_INPUT = "i want to talk to";
     public static final String REGISTER_QUERY = "REGISTER ";
     public static final String LOOKUP_QUERY = "LOOKUP ";
+    public static final String MESSAGE_CMD = "/msg";
 
     private String hostName;
     private int portNumber;
@@ -25,6 +26,7 @@ public class ChatClient {
     private Map<String, ChatHandler> openChats; //maps host addresses to the open chat with them
     private Map<String, String> hosts; //maps names to hosts
     private String userName;
+    private BufferedReader stdIn; //because doing this in one method and closing it closes std in
 
     private boolean isRegistered;
 
@@ -35,12 +37,12 @@ public class ChatClient {
         this.openChats = new HashMap<>();
         this.hosts = new HashMap<>();
         this.userName = "";
+        this.stdIn = new BufferedReader(new InputStreamReader(System.in));
     }
 
     private void runClient(){
-        try(BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in))){
+        try{
             System.out.println("client started");
-
 //          connect to server
             try(Socket socket = new Socket(hostName, portNumber);
                 PrintWriter out = new PrintWriter(socket.getOutputStream());
@@ -53,7 +55,10 @@ public class ChatClient {
                             String response = register(name, listeningPortNumber, out, in);
                             isRegistered = response.trim().equals(ChatServer.REGISTER_CONFIRM);
                             System.out.println(response);
-                            listenForChats(); // can listen now that we're registered
+                            if (isRegistered){
+                                userName = name;
+                                listenForChats(); // can listen now that we're registered
+                            }
                         } else {
                             System.out.println("You are already registered.");
                         }
@@ -64,8 +69,8 @@ public class ChatClient {
                             String fullIP = response.substring(response.indexOf(" ")+1);
                             String[] parts = fullIP.split(":");
                             String ip = parts[0];
-//                            int port = Integer.parseInt(parts[1]);
-                            int port = ChatServer.PORT_NUMBER;
+                            int port = Integer.parseInt(parts[1]);
+//                            int port = ChatServer.PORT_NUMBER;
                             System.out.println("Connecting to " + name + " at " + ip + ":" + port);
                             startChat(ip, port);
                             startListeningForInput();
@@ -82,11 +87,13 @@ public class ChatClient {
     }
 
     private void startChat(String ip, int portNumber){
-        try(Socket socket = new Socket(ip, portNumber)){
+        try {
+            Socket socket = new Socket(ip, portNumber);
             String host = socket.getInetAddress().getHostAddress();
             ChatHandler chatHandler = new ChatHandler(socket);
             openChats.put(host, chatHandler);
             //send this client's username
+            System.out.println("Sending name " + userName + " to " + host);
             PrintWriter out = new PrintWriter(socket.getOutputStream());
             out.println(userName);
             out.flush();
@@ -131,13 +138,14 @@ public class ChatClient {
         public void run(){
             try{
                 ServerSocket serverSocket = new ServerSocket(listeningPortNumber);
+                System.out.println("Listening for chats on port " + listeningPortNumber);
                 while (true){
                     try{
                         Socket socket = serverSocket.accept();
-                        System.out.println("Starting new chat thread");
                         ChatHandler chatHandler = new ChatHandler(socket);
                         String host = socket.getInetAddress().getHostAddress();
                         openChats.put(host, chatHandler);
+                        System.out.println("Starting new chat thread with " + host + ":" + socket.getPort());
                         (new Thread(chatHandler)).start();
                     } catch (IOException e){
                         e.printStackTrace();
@@ -171,6 +179,7 @@ public class ChatClient {
                 // first thing sent will be the name
                 String name = in.readLine().trim();
                 String host = socket.getInetAddress().getHostAddress();
+                System.out.println("Started chat with " + name + " at " + host);
                 hosts.put(name, host);
 
                 String input;
@@ -202,22 +211,38 @@ public class ChatClient {
 
         @Override
         public void run() {
-            try(BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in))){
+            try{
+                System.out.println("Listening for user input");
                 String input;
                 while ((input = stdIn.readLine()) != null){
-                    if (input.split(" ")[0].endsWith(":")){
-                        String targetName = input.split(":")[0];
+                    System.out.println("User input: " + input);
+                    // message to a specific person
+                    if (input.startsWith(MESSAGE_CMD)){
+                        System.out.println("private message");
+                        try{
+                            String targetName = input.split(" ")[1];
 //                        ChatHandler chatHandler = getChatByName(targetName);
-                        ChatHandler chatHandler = openChats.get(hosts.getOrDefault(targetName, null));
-                        if (chatHandler != null){
-                            String message = input.substring(input.indexOf(":")+1);
-                            chatHandler.sendMessage(message);
-                        } else {
-                            //send it to everyone?
+                            ChatHandler chatHandler = openChats.get(hosts.getOrDefault(targetName, null));
+                            String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
+                            if (chatHandler != null){
+                                chatHandler.sendMessage(message);
+                            } else {
+                                System.out.println("Couldn't find user " + targetName);
+                            }
+                        } catch (ArrayIndexOutOfBoundsException e){
+                            System.out.println("You need to specify a user to message.");
+                        }
+                    }
+                    // send it to everyone
+                    else {
+                        String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
+                        for (String name: openChats.keySet()){
+                            openChats.get(name).sendMessage(message);
                         }
                     }
                 }
             } catch (IOException e){
+                System.out.println("Something went wrong");
                 e.printStackTrace();
             }
         }
