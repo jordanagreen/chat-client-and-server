@@ -2,7 +2,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
@@ -10,12 +9,12 @@ import java.util.Map;
 
 public class ChatServer {
 
-    private Map<String, InetAddress> ipAddressMap;
+    private Map<String, String> ipAddressMap;
     private int portNumber;
-
 
     public static final String IP_STRING = "IP: ";
     public static final String REGISTER_CONFIRM = "You are now registered.";
+    public static final int PORT_NUMBER = 8888;
 
     ChatServer(int portNumber){
         this.portNumber = portNumber;
@@ -28,7 +27,7 @@ public class ChatServer {
                 try{
                     Socket socket = serverSocket.accept();
                     System.out.println("Starting new thread");
-                    (new ResponseThread(socket)).start();
+                    (new Thread(new ResponseHandler(socket))).start();
                 } catch (IOException e){
                     e.printStackTrace();
                 }
@@ -59,10 +58,10 @@ public class ChatServer {
     }
 
 
-    private class ResponseThread extends Thread{
+    private class ResponseHandler implements Runnable{
         private Socket socket;
 
-        ResponseThread(Socket socket){
+        ResponseHandler(Socket socket){
             this.socket = socket;
         }
 
@@ -75,22 +74,22 @@ public class ChatServer {
                 while ((input = in.readLine()) != null){
                     System.out.println("input " + input);
                     if (isRegistrationQuery(input)) {
-                        System.out.println("register");
-                        String userName = input.substring(input.indexOf(" "));
+//                        System.out.println("register");
+                        String userInfo = input.substring(input.indexOf(" ")+1);
+                        String userName = userInfo.split(":")[0];
+                        int port = Integer.parseInt(userInfo.split(":")[1]);
                         if (ipAddressMap.containsKey(userName)){
                             out.println(userName + " is already registered.");
                             out.flush();
                         } else {
-                            InetAddress ip = socket.getInetAddress();
-                            ipAddressMap.put(userName, ip);
-                            System.out.println("added " + userName + " " + ip);
+                            registerUser(userName, port);
                             out.println(REGISTER_CONFIRM);
                             out.flush();
                         }
                     } else if (isLookupQuery(input)){
-                        String queriedName = input.substring(input.indexOf(" "));
+                        String queriedName = input.substring(input.indexOf(" ")+1);
                         if (ipAddressMap.containsKey(queriedName)){
-                            out.println(IP_STRING + ipAddressMap.get(queriedName).toString());
+                            out.println(IP_STRING + ipAddressMap.get(queriedName));
                             out.flush();
                         } else {
                             out.println("User " + queriedName + " is not registered.");
@@ -101,6 +100,13 @@ public class ChatServer {
             } catch (IOException e){
                 e.printStackTrace();
             }
+        }
+
+        private void registerUser(String userName, int port){
+            String ip = socket.getInetAddress().getHostAddress();
+            String fullIP = ip + ":" + port;
+            ipAddressMap.put(userName, fullIP);
+            System.out.println("added " + userName + " " + fullIP);
         }
     }
 }
