@@ -4,9 +4,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -27,7 +25,7 @@ public class ChatClient {
     private Map<String, String> hosts = new HashMap<>(); //maps names to hosts
     private String userName = "";
     private BufferedReader stdIn = new BufferedReader(
-            new InputStreamReader(System.in)); //because doing this in one method and closing it closes std in
+            new InputStreamReader(System.in)); //because doing this in try-with and closing it closes std in
     private boolean inChatMode = false;
 
     private boolean isRegistered;
@@ -86,9 +84,9 @@ public class ChatClient {
     private void startChat(String ip, int portNumber){
         try {
             Socket socket = new Socket(ip, portNumber);
-            String host = socket.getInetAddress().getHostAddress();
+//            String host = socket.getInetAddress().getHostAddress();
             ChatHandler chatHandler = new ChatHandler(socket);
-            openChats.put(host, chatHandler);
+//            openChats.put(host, chatHandler);
             (new Thread(chatHandler)).start();
         } catch (IOException e){
             e.printStackTrace();
@@ -135,9 +133,9 @@ public class ChatClient {
                     try{
                         Socket socket = serverSocket.accept();
                         ChatHandler chatHandler = new ChatHandler(socket);
-                        String host = socket.getInetAddress().getHostAddress();
-                        openChats.put(host, chatHandler);
-                        System.out.println("Starting new chat thread with " + host + ":" + socket.getPort());
+//                        String host = socket.getInetAddress().getHostAddress();
+//                        openChats.put(host, chatHandler);
+
                         (new Thread(chatHandler)).start();
                     } catch (IOException e){
                         e.printStackTrace();
@@ -171,9 +169,10 @@ public class ChatClient {
                     startListeningForInput();
                     inChatMode = true;
                 }
-
                 //send this client's username
-                String host = socket.getInetAddress().getHostAddress();
+                String host = socket.getInetAddress().getHostAddress() + ":" + socket.getPort();
+                openChats.put(host, this);
+                System.out.println("Starting new chat thread with " + host);
                 System.out.println("Sending name " + userName + " to " + host);
 //                PrintWriter out = new PrintWriter(socket.getOutputStream());
                 out.println(userName);
@@ -219,10 +218,9 @@ public class ChatClient {
                         System.out.println("private message");
                         try{
                             String targetName = input.split(" ")[1];
-//                        ChatHandler chatHandler = getChatByName(targetName);
-                            ChatHandler chatHandler = openChats.get(hosts.getOrDefault(targetName, null));
-                            String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
+                            ChatHandler chatHandler = openChats.get(hosts.get(targetName));
                             if (chatHandler != null){
+                                String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
                                 chatHandler.sendMessage(message);
                             } else {
                                 System.out.println("Couldn't find user " + targetName);
@@ -234,8 +232,8 @@ public class ChatClient {
                     // send it to everyone
                     else {
 //                        String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
-                        for (String name: openChats.keySet()){
-                            openChats.get(name).sendMessage(input);
+                        for (String host: openChats.keySet()){
+                            openChats.get(host).sendMessage(input);
                         }
                     }
                 }
