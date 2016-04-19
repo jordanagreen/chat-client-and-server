@@ -24,8 +24,8 @@ public class ChatClient {
     private Map<String, ChatHandler> openChats = new HashMap<>(); //maps host addresses to the open chat with them
     private Map<String, String> hosts = new HashMap<>(); //maps names to hosts
     private String userName = "";
-    private BufferedReader stdIn = new BufferedReader(
-            new InputStreamReader(System.in)); //because doing this in try-with and closing it closes std in
+//    private BufferedReader stdIn = new BufferedReader(
+//            new InputStreamReader(System.in)); //because doing this in try-with and closing it closes std in
     private boolean inChatMode = false;
 
     private boolean isRegistered;
@@ -37,45 +37,93 @@ public class ChatClient {
     }
 
     private void runClient(){
-        try{
-            System.out.println("client started");
+
+        //TODO: move registration and lookup out of this loop to free them up for chatting after registration
+        //TODO: don't connect to the server until the registration command is run
+
+        try(BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in))){
+//            System.out.println("client started");
 //          connect to server
-            try(Socket socket = new Socket(hostName, portNumber);
-                PrintWriter out = new PrintWriter(socket.getOutputStream());
-                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+//            try(Socket socket = new Socket(hostName, portNumber);
+//                PrintWriter out = new PrintWriter(socket.getOutputStream());
+//                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
                 String input;
                 while ((input = stdIn.readLine()) != null){
-                    if (isRegistration(input)){
-                        if (!isRegistered){
-                            String name = input.substring(input.lastIndexOf(" ")+1);
-                            String response = register(name, listeningPortNumber, out, in);
-                            isRegistered = response.trim().equals(ChatServer.REGISTER_CONFIRM);
-                            System.out.println(response);
-                            if (isRegistered){
-                                userName = name;
-                                listenForChats(); // can listen now that we're registered
-                            }
-                        } else {
-                            System.out.println("You are already registered.");
+                    if (!isRegistered){
+//                        System.out.println("Not registered, input: " + input);
+                        if (isRegistration(input)){
+//                            if (!isRegistered){
+                                try(Socket socket = new Socket(hostName, portNumber);
+                                    PrintWriter out = new PrintWriter(socket.getOutputStream());
+                                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))){
+                                    String name = input.substring(input.lastIndexOf(" ")+1);
+                                    String response = register(name, listeningPortNumber, out, in);
+                                    isRegistered = response.trim().equals(ChatServer.REGISTER_CONFIRM);
+                                    System.out.println(response);
+                                    if (isRegistered){
+                                        userName = name;
+                                        listenForChats(); // can listen now that we're registered
+                                    }
+                                } catch (IOException e){
+                                    e.printStackTrace();
+                                }
+//                            } else {
+//                                System.out.println("You are already registered.");
+//                            }
                         }
-                    } else if (isLookup(input)){
-                        String name = input.substring(input.lastIndexOf(" ")+1);
-                        String response = lookupIP(name, out, in);
-                        if (response.startsWith(ChatServer.IP_STRING)){
-                            String fullIP = response.substring(response.indexOf(" ")+1);
-                            String[] parts = fullIP.split(":");
-                            String ip = parts[0];
-                            int port = Integer.parseInt(parts[1]);
+                    } else { //already registered
+//                        System.out.println("Already registered, input: " + input);
+                        if (isLookup(input)){
+                            String name = input.substring(input.lastIndexOf(" ")+1);
+                            try(Socket socket = new Socket(hostName, portNumber);
+                                PrintWriter out = new PrintWriter(socket.getOutputStream());
+                                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))){
+                                String response = lookupIP(name, out, in);
+                                if (response.startsWith(ChatServer.IP_STRING)){
+                                    String fullIP = response.substring(response.indexOf(" ")+1);
+                                    String[] parts = fullIP.split(":");
+                                    String ip = parts[0];
+                                    int port = Integer.parseInt(parts[1]);
 //                            int port = ChatServer.PORT_NUMBER;
-                            System.out.println("Connecting to " + name + " at " + ip + ":" + port);
-                            startChat(ip, port);
-                            break; //don't need the server anymore
-                        } else {
-                            System.out.println(response);
+//                                    System.out.println("Connecting to " + name + " at " + ip + ":" + port);
+                                    startChat(ip, port);
+//                                    break; //don't need the server anymore
+                                } else {
+                                    System.out.println(response);
+                                }
+                            } catch (IOException e){
+                                e.printStackTrace();
+                            }
+
+                        } else { //message
+//                            System.out.println("User input: " + input);
+                            // message to a specific person
+                            if (input.startsWith(MESSAGE_CMD)){
+//                                System.out.println("private message");
+                                try{
+                                    String targetName = input.split(" ")[1];
+                                    ChatHandler chatHandler = openChats.get(hosts.get(targetName));
+                                    if (chatHandler != null){
+                                        String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1)+1);
+                                        chatHandler.sendMessage(message);
+                                    } else {
+                                        System.out.println("Couldn't find user " + targetName);
+                                    }
+                                } catch (ArrayIndexOutOfBoundsException e){
+                                    System.out.println("You need to specify a user to message.");
+                                }
+                            }
+                            // send it to everyone
+                            else {
+//                        String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
+                                for (String host: openChats.keySet()){
+                                    openChats.get(host).sendMessage(input);
+                                }
+                            }
                         }
                     }
                 }
-            }
+//            }
         } catch (IOException e){
             e.printStackTrace();
         }
@@ -128,7 +176,7 @@ public class ChatClient {
         public void run(){
             try{
                 ServerSocket serverSocket = new ServerSocket(listeningPortNumber);
-                System.out.println("Listening for chats on port " + listeningPortNumber);
+//                System.out.println("Listening for chats on port " + listeningPortNumber);
                 while (true){
                     try{
                         Socket socket = serverSocket.accept();
@@ -166,21 +214,25 @@ public class ChatClient {
         public void run(){
             try{
                 if (!inChatMode){
-                    startListeningForInput();
+//                    startListeningForInput();
                     inChatMode = true;
                 }
                 //send this client's username
                 String host = socket.getInetAddress().getHostAddress() + ":" + socket.getPort();
                 openChats.put(host, this);
-                System.out.println("Starting new chat thread with " + host);
-                System.out.println("Sending name " + userName + " to " + host);
+//                System.out.println("Starting new chat thread with " + host);
+//                System.out.println("Open chats:");
+//                for (String h: openChats.keySet()){
+//                    System.out.println(h);
+//                }
+//                System.out.println("Sending name " + userName + " to " + host);
 //                PrintWriter out = new PrintWriter(socket.getOutputStream());
                 out.println(userName);
                 out.flush();
 
                 // first thing sent will be the name
                 String name = in.readLine().trim();
-                System.out.println("Got name " + name + " from " + host);
+//                System.out.println("Got name " + name + " from " + host);
                 hosts.put(name, host);
 
                 String input;
@@ -200,50 +252,76 @@ public class ChatClient {
         }
     }
 
-    private void startListeningForInput(){
-        (new Thread(new InputListener())).start();
-    }
-
-    private class InputListener implements Runnable{
-
-        @Override
-        public void run() {
-            try{
-                System.out.println("Listening for user input");
-                String input;
-                while ((input = stdIn.readLine()) != null){
-                    System.out.println("User input: " + input);
-                    // message to a specific person
-                    if (input.startsWith(MESSAGE_CMD)){
-                        System.out.println("private message");
-                        try{
-                            String targetName = input.split(" ")[1];
-                            ChatHandler chatHandler = openChats.get(hosts.get(targetName));
-                            if (chatHandler != null){
-                                String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
-                                chatHandler.sendMessage(message);
-                            } else {
-                                System.out.println("Couldn't find user " + targetName);
-                            }
-                        } catch (ArrayIndexOutOfBoundsException e){
-                            System.out.println("You need to specify a user to message.");
-                        }
-                    }
-                    // send it to everyone
-                    else {
-//                        String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
-                        for (String host: openChats.keySet()){
-                            openChats.get(host).sendMessage(input);
-                        }
-                    }
-                }
-            } catch (IOException e){
-//                System.out.println("Something went wrong");
-                e.printStackTrace();
-            }
-        }
-
-    }
+//    private void startListeningForInput(){
+//        (new Thread(new InputListener())).start();
+//    }
+//
+//    private class InputListener implements Runnable{
+//
+//        @Override
+//        public void run() {
+//            try{
+//                System.out.println("Listening for user input");
+//                String input;
+//                while ((input = stdIn.readLine()) != null){
+//                    if (inChatMode){
+//
+//                        System.out.println("User input: " + input);
+//                        // message to a specific person
+//                        if (input.startsWith(MESSAGE_CMD)){
+//                            System.out.println("private message");
+//                            try{
+//                                String targetName = input.split(" ")[1];
+//                                ChatHandler chatHandler = openChats.get(hosts.get(targetName));
+//                                if (chatHandler != null){
+//                                    String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1)+1);
+//                                    chatHandler.sendMessage(message);
+//                                } else {
+//                                    System.out.println("Couldn't find user " + targetName);
+//                                }
+//                            } catch (ArrayIndexOutOfBoundsException e){
+//                                System.out.println("You need to specify a user to message.");
+//                            }
+//                        }
+//                        // send it to everyone
+//                        else {
+////                        String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
+//                            for (String host: openChats.keySet()){
+//                                openChats.get(host).sendMessage(input);
+//                            }
+//                        }
+//                    }
+//                    // registered but not in chat mode yet, waiting for lookup or connection
+//                    else if (isLookup(input)){
+//                        String name = input.substring(input.lastIndexOf(" ")+1);
+//                        try(Socket socket = new Socket(hostName, portNumber);
+//                            PrintWriter out = new PrintWriter(socket.getOutputStream());
+//                            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))){
+//                            String response = lookupIP(name, out, in);
+//                            if (response.startsWith(ChatServer.IP_STRING)){
+//                                String fullIP = response.substring(response.indexOf(" ")+1);
+//                                String[] parts = fullIP.split(":");
+//                                String ip = parts[0];
+//                                int port = Integer.parseInt(parts[1]);
+////                            int port = ChatServer.PORT_NUMBER;
+//                                System.out.println("Connecting to " + name + " at " + ip + ":" + port);
+//                                startChat(ip, port);
+//                                break; //don't need the server anymore
+//                            } else {
+//                                System.out.println(response);
+//                            }
+//                        } catch (IOException e){
+//                            e.printStackTrace();
+//                        }
+//                    }
+//                }
+//            } catch (IOException e){
+////                System.out.println("Something went wrong");
+//                e.printStackTrace();
+//            }
+//        }
+//
+//    }
 
     public static void main(String[] args){
         if (args.length != 3 && args.length != 2){
