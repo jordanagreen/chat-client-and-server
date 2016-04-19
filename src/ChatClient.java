@@ -23,10 +23,12 @@ public class ChatClient {
     private String hostName;
     private int portNumber;
     private int listeningPortNumber;
-    private Map<String, ChatHandler> openChats; //maps host addresses to the open chat with them
-    private Map<String, String> hosts; //maps names to hosts
-    private String userName;
-    private BufferedReader stdIn; //because doing this in one method and closing it closes std in
+    private Map<String, ChatHandler> openChats = new HashMap<>(); //maps host addresses to the open chat with them
+    private Map<String, String> hosts = new HashMap<>(); //maps names to hosts
+    private String userName = "";
+    private BufferedReader stdIn = new BufferedReader(
+            new InputStreamReader(System.in)); //because doing this in one method and closing it closes std in
+    private boolean inChatMode = false;
 
     private boolean isRegistered;
 
@@ -34,10 +36,6 @@ public class ChatClient {
         this.hostName = hostName;
         this.portNumber = portNumber;
         this.listeningPortNumber = listeningPortNumber;
-        this.openChats = new HashMap<>();
-        this.hosts = new HashMap<>();
-        this.userName = "";
-        this.stdIn = new BufferedReader(new InputStreamReader(System.in));
     }
 
     private void runClient(){
@@ -73,7 +71,6 @@ public class ChatClient {
 //                            int port = ChatServer.PORT_NUMBER;
                             System.out.println("Connecting to " + name + " at " + ip + ":" + port);
                             startChat(ip, port);
-                            startListeningForInput();
                             break; //don't need the server anymore
                         } else {
                             System.out.println(response);
@@ -92,11 +89,6 @@ public class ChatClient {
             String host = socket.getInetAddress().getHostAddress();
             ChatHandler chatHandler = new ChatHandler(socket);
             openChats.put(host, chatHandler);
-            //send this client's username
-            System.out.println("Sending name " + userName + " to " + host);
-            PrintWriter out = new PrintWriter(socket.getOutputStream());
-            out.println(userName);
-            out.flush();
             (new Thread(chatHandler)).start();
         } catch (IOException e){
             e.printStackTrace();
@@ -162,30 +154,41 @@ public class ChatClient {
     private class ChatHandler implements Runnable{
 
         private Socket socket;
-//        private String name;
+        private BufferedReader in;
+        private PrintWriter out;
 
-        ChatHandler(Socket socket){
+        ChatHandler(Socket socket) throws IOException{
             this.socket = socket;
+            //keep references, using try-with-resources closes the sockets when the reader/writer is closed
+            this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            this.out = new PrintWriter(socket.getOutputStream());
         }
-
-//        public String getName(){
-//            return name;
-//        }
 
         @Override
         public void run(){
-            try(BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))){
+            try{
+                if (!inChatMode){
+                    startListeningForInput();
+                    inChatMode = true;
+                }
+
+                //send this client's username
+                String host = socket.getInetAddress().getHostAddress();
+                System.out.println("Sending name " + userName + " to " + host);
+//                PrintWriter out = new PrintWriter(socket.getOutputStream());
+                out.println(userName);
+                out.flush();
 
                 // first thing sent will be the name
                 String name = in.readLine().trim();
-                String host = socket.getInetAddress().getHostAddress();
-                System.out.println("Started chat with " + name + " at " + host);
+                System.out.println("Got name " + name + " from " + host);
                 hosts.put(name, host);
 
                 String input;
                 while ((input = in.readLine()) != null) {
                     System.out.println(input);
                 }
+//                System.out.println("done");
             }
             catch (IOException e){
                 e.printStackTrace();
@@ -193,13 +196,8 @@ public class ChatClient {
         }
 
         public void sendMessage(String message){
-            try(PrintWriter out = new PrintWriter(socket.getOutputStream())){
-                out.println(userName + ": " + message);
-                out.flush();
-            }
-            catch (IOException e){
-                e.printStackTrace();
-            }
+            out.println(userName + ": " + message);
+            out.flush();
         }
     }
 
@@ -235,14 +233,14 @@ public class ChatClient {
                     }
                     // send it to everyone
                     else {
-                        String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
+//                        String message = input.substring(input.indexOf(" ", input.indexOf(" ")+1));
                         for (String name: openChats.keySet()){
-                            openChats.get(name).sendMessage(message);
+                            openChats.get(name).sendMessage(input);
                         }
                     }
                 }
             } catch (IOException e){
-                System.out.println("Something went wrong");
+//                System.out.println("Something went wrong");
                 e.printStackTrace();
             }
         }
