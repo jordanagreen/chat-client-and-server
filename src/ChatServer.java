@@ -9,12 +9,11 @@ import java.util.Map;
 
 public class ChatServer {
 
-    private Map<String, String> ipAddressMap;
+    private Map<String, String> ipAddressMap; //maps names to hosts
     private int portNumber;
 
     public static final String IP_STRING = "IP: ";
     public static final String REGISTER_CONFIRM = "You are now registered.";
-    public static final int PORT_NUMBER = 8888;
 
     ChatServer(int portNumber){
         this.portNumber = portNumber;
@@ -74,7 +73,6 @@ public class ChatServer {
                 while ((input = in.readLine()) != null){
                     System.out.println("input " + input);
                     if (isRegistrationQuery(input)) {
-//                        System.out.println("register");
                         String userInfo = input.substring(input.indexOf(" ")+1);
                         String userName = userInfo.split(":")[0];
                         int port = Integer.parseInt(userInfo.split(":")[1]);
